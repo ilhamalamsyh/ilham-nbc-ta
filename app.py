@@ -14,41 +14,36 @@ from nltk.tokenize import word_tokenize
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from streamlit_option_menu import option_menu
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.svm import SVC
 from sklearn.metrics import ConfusionMatrixDisplay
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import chi2
 from sklearn.metrics import classification_report, accuracy_score, f1_score, confusion_matrix, precision_score, recall_score
 from sklearn.naive_bayes import MultinomialNB
-
 vect = TfidfVectorizer()
 
 # SideBar
 with st.sidebar:
-    selected = option_menu("Main Menu", ["Home", 'Preprocessing','Naïve Bayes', 'Prediksi'], 
+    selected = option_menu("Main Menu", ["Beranda", 'Preprocessing','Naïve Bayes', 'Prediksi'], 
         icons=['house', 'gear', 'box','triangle'], menu_icon="cast", default_index=0)
 
-if selected == 'Home':
+if selected == 'Beranda':
     st.markdown("""
     <h1 style='text-align: center;'>Universitas Budi Luhur</h1>
-    <h3 style='text-align: center;'>ANALISIS SENTIMEN TERHADAP ULASAN PENGGUNA APLIKASI WAHYOO MENGGUNAKAN METODE NAÏVE BAYES CLASSIFIER</h3>
-    <h5 style='text-align: center;'>Analisis sentimen dapat menggunakan teknik text mining. Yang dapat mengklasifikasikan konten opini dari sumber data yang sangat banyak. Metode text mining untuk melakukan analisis sentimen terhadapat ulasan sebuah aplikasi di Google Play Store yaitu menggunakan algoritma Naïve Bayes karena proses analisis bersifat klasifikasi.</h5>
+    <h3 style='text-align: center;'>ANALISIS SENTIMEN TERHADAP ULASAN PENGGUNA APLIKASI WAHYOO MENGGUNAKAN METODE MULTINOMIAL NAÏVE BAYES</h3>
+    <h5 style='text-align: center;'>Analisis sentimen dapat menggunakan teknik text mining. Yang dapat mengklasifikasikan konten opini dari sumber data yang sangat banyak. Metode text mining untuk melakukan analisis sentimen terhadap ulasan sebuah aplikasi di Google Play Store yaitu menggunakan algoritma Multinomial Naïve Bayes karena proses analisis bersifat klasifikasi.</h5>
     """, unsafe_allow_html=True)
 
 elif(selected == 'Preprocessing'):
     st.title('Preprocessing')
-    uploaded_file = st.file_uploader('Pilih file')
+
+    uploaded_file = st.file_uploader('Pilih file', type='.csv', key='upload_labelling_result')
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         df = pd.DataFrame(df)
         df = df.dropna()
         st.write(df)
 
-        if st.button('Preprocessing', key='process'):
+        if st.button('Mulai Proses', key='process'):
             # Case Folding
             def caseFolding(ulasan):
                 ulasan = ulasan.lower()
@@ -82,14 +77,13 @@ elif(selected == 'Preprocessing'):
             df.drop_duplicates(subset=['cleansing'], keep='first', inplace=True)
 
             # Normalisasi kata
-            kamus_normalisasi = pd.read_csv('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/assets/kamus_slangwords.csv', sep=';')
+            kamus_normalisasi = pd.read_csv('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/assets/kamus_slangwords.csv', sep=';')
 
             def text_normalize(text):
                 text = ' '.join([kamus_normalisasi[kamus_normalisasi['kata_slang'] == word]['kata_benar'].values[0]
                 if(kamus_normalisasi['kata_slang'] == word).any()
                 else word for word in text.split()
                 ])
-                print('text_slang: ', text)
                 text = str.lower(text)
                 return text
             df['normalized'] = df['cleansing'].apply(lambda x: text_normalize(x))
@@ -102,7 +96,7 @@ elif(selected == 'Preprocessing'):
             df['Tokenization'] = df['normalized'].apply(lambda x:tokenization(x.lower()))
 
             # Stopword removal (menghapus kata yang tidak penting)
-            stopword = nltk.corpus.stopwords.words('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/assets/indonesia-stopwords.txt')
+            stopword = nltk.corpus.stopwords.words('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/assets/indonesia-stopwords.txt')
 
             def remove_stopwords(newtext):
                 newtext = [word for word in newtext if word not in stopword]
@@ -118,40 +112,43 @@ elif(selected == 'Preprocessing'):
                 for w in comments:
                     dt = stemmer.stem(w)
                     texts.append(dt)
-                text_results = []
-                text_results = ' '.join(texts)
-                return text_results
+                result_texts = []
+                result_texts = ' '.join(texts)
+                return result_texts
             
             df['Stemmed'] = df['Stopword_Removal'].apply(lambda x: stemming(x))
 
             st.write('Hasil Setelah Preprocessing')
             st.write(df)
 
-            dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/data/hasil_preprocessing.csv'
+            dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/outputs/data/hasil_preprocessing.csv'
             df.to_csv(dictname)
             st.write('Data berhasil didownload!')
             
 elif(selected == 'Naïve Bayes'):
     st.title('Naïve Bayes')
-    uploaded_file = st.file_uploader('Pilih file')
+    uploaded_file = st.file_uploader('Pilih file', type='.csv', key='upload_preprocessing_result')
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         df = pd.DataFrame(df)
+        sentimen = df['content'].groupby(df['Label']).count().values
         df = df.dropna()
 
-        df.head()
+
+        # df.head()
         x = df['Stemmed']
         y = df['Label']
 
-        # MODELLING
-        x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.3, stratify=y, shuffle=True,random_state=42)
+        # Split data
+        x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.2, stratify=y, shuffle=True,random_state=42)
 
         # Vectorizer
         vectorizer = CountVectorizer(binary=True)
 
-        # tokenize and make the document into matrix
+        # Learn a vocabulary dictionary of all tokens in the raw documents.
         vectorizer.fit(list(x_train) + list(x_test))
-        pickle.dump(vectorizer, open("/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/models/feature_count_vect.sav", "wb"))
+
+        pickle.dump(vectorizer, open("/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/outputs/models/feature_count_vect.sav", "wb"))
 
         # Transform document to document term matrix
         x_train_vec = vectorizer.transform(x_train)
@@ -174,67 +171,31 @@ elif(selected == 'Naïve Bayes'):
         data = pd.DataFrame(testing_results)
         st.write(data)
 
+        tn, fp, fn, tp = confusion_matrix(y_test, prediction).ravel()
+
         # cari akurasi
-        acc = accuracy_score(y_test, prediction)
-        percentage = '{:.0%}'.format(acc)
-        acc_percentage = f'{acc:.0%}'
+        accuracy = (tp + tn) / (tp+tn+fp+fn)
+        percentage = '{:.0%}'.format(accuracy)
+        acc_percentage = f'{accuracy:.0%}'
 
         # Precision
-        precision = precision_score(y_test, prediction, average='binary', pos_label='Negatif')
+        precision = tp / (tp+fp)
         percentage = '{:.0%}'.format(precision)
         prec_percentage = f'{precision:.0%}'
 
         # Recall
-        recall = recall_score(y_test, prediction, average='binary', pos_label='Negatif')
+        recall = tp / (tp+fn)
         percentage = '{:.0%}'.format(recall)
         rec_percentage = f'{recall:.0%}'
+
         data_evaluasi = [['Akurasi', acc_percentage], ['Presisi', prec_percentage], ['Recall', rec_percentage]]
-        st.markdown("""
-        <style>
-            table {
-                'font-family': arial, sans-serif;
-                'border-collapse': collapse;
-                'width': 100%;
-            }
-
-            td, th {
-                'border': 1px solid #dddddd;
-                'text-align': left;
-                'padding': 8px;
-            }
-
-            tr:nth-child(even) {
-                'background-color': #dddddd;
-            }
-        </style>
-        <table>
-            <tr>
-                <td>Akurasi</td>
-                <td>{str(acc_percentage)}</td>
-            </tr>
-            <tr>
-                <td>Presisi</td>
-                <td>{str(prec_percentage)}</td>
-            </tr>
-            <tr>
-                <td>Recall</td>
-                <td>{str(rec_percentage)}</td>
-            </tr>
-        </table>
-        """,unsafe_allow_html=True)
         evaluasi_hasil_df = pd.DataFrame(data_evaluasi, columns=['Nilai', 'Persentase'])
-
         st.table(evaluasi_hasil_df)
 
-        tn, fp, fn, tp = confusion_matrix(y_test, prediction).ravel()
-
         # confusion matrix
-        cm = confusion_matrix(y_test, prediction,labels=['Positif', 'Negatif'])
-        print(f'confusion matrix:\n {cm}')
-        print('============================================================')
-        print('classf-report',classification_report(y_test, prediction, zero_division=0))
+        cm = confusion_matrix(y_test, prediction)
 
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm,display_labels=['Positif', 'Negatif'])
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm,display_labels=['Negatif', 'Positif'])
 
         disp.plot()
         fig = plt.show()
@@ -242,13 +203,15 @@ elif(selected == 'Naïve Bayes'):
         st.set_option('deprecation.showPyplotGlobalUse', False)
         st.pyplot(fig)
 
+        # Visualisasi Hasil
+        dataset = pd.read_csv('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/assets/wahyoo_app_review.csv')
+
         # Plotting Pie
         def pct_pie(pct, allvals):
-            absolute = int(pct/100.*np.sum(allvals))
+            absolute = int(round(pct/100.*np.sum(allvals)))
             return '{:.1f}%\n{:d}'.format(pct, absolute)
 
-        sentimen = data['content'].groupby(data['class']).count().values
-        print('sentimen: ', sentimen)
+        sentimen = dataset['content'].groupby(dataset['Label']).count().values
 
         plt.figure(figsize = (8,8))
         plt.pie(sentimen, explode=(0,0), labels=['Negatif', 'Positif'], shadow = False, 
@@ -260,7 +223,7 @@ elif(selected == 'Naïve Bayes'):
         st.set_option('deprecation.showPyplotGlobalUse', False)
         st.pyplot(fig)
 
-        dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/models/trained_model.sav'
+        dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/outputs/models/trained_model.sav'
 
         if st.button('Download Model'):
             with open(dictname, "wb") as f:
@@ -268,51 +231,43 @@ elif(selected == 'Naïve Bayes'):
             st.write('Model berhasil didownload!')
 
 elif (selected == 'Prediksi'):
-    dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/models/trained_model.sav'
-    count_vect_path = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/models/feature_count_vect.sav'
+    dictname = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/outputs/models/trained_model.sav'
+    count_vect_path = '/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-nbc-ta/outputs/models/feature_count_vect.sav'
 
-    # try:
-    model_fraud = pickle.load(open(dictname, 'rb'))
-    print('model_fraud: ', model_fraud)
-    # finally:
-    #     model_fraud.close()
-    # with open('outputs/models/trained_model.sav', 'rb') as f:
-    #     model_fraud = pickle.load(f)
+    try:
+        model_file = open(dictname, 'rb')
+        model_fraud = pickle.load(model_file)
+        vectorizer = pickle.load(open(count_vect_path, "rb"))
 
-    vectorizer = pickle.load(open(count_vect_path, "rb"))
+        # Judul Halaman
+        st.title('Prediksi Ulasan Aplikasi Wahyoo')
 
-    # loaded_vec = TfidfVectorizer(decode_error='replace', vocabulary=set(pickle.load(open('/Users/nezuko/Documents/tugas_akhir/web-app-ta/ilham-svm-ta/outputs/models/feature_tf-idf.sav', 'rb'))))
+        clean_teks = st.text_input('Masukkan ulasan anda')
 
-    # vect = TfidfVectorizer()
+        fraud_detection = ''
 
-    # Judul Halaman
-    st.title('Prediksi Ulasan Aplikasi Wahyoo')
+        if (clean_teks == ''):
+            if(st.button('Hasil Deteksi', disabled=True)):    
+                predict_fraud = model_fraud.predict(vectorizer.transform([clean_teks]).toarray())
 
-    clean_teks = st.text_input('Masukkan ulasan anda')
-    print('c-txt: ', clean_teks)
+                if(predict_fraud[0] == 'Positif'):
+                    fraud_detection = 'Sentimen Positif'
+                elif(predict_fraud[0] == 'Negatif'):
+                    fraud_detection = 'Sentimen Negatif'
+                else:
+                    fraud_detection = 'Tidak Terdeteksi'
+        elif (clean_teks != ''):
+            if(st.button('Hasil Deteksi')):
+                predict_fraud = model_fraud.predict(vectorizer.transform([clean_teks]).toarray())
 
-    fraud_detection = ''
+                if(predict_fraud[0] == 'Positif'):
+                    fraud_detection = 'Sentimen Positif'
+                elif(predict_fraud[0] == 'Negatif'):
+                    fraud_detection = 'Sentimen Negatif'
+                else:
+                    fraud_detection = 'Tidak Terdeteksi'
 
-    if (clean_teks == ''):
-        if(st.button('Hasil Deteksi', disabled=True)):    
-            predict_fraud = model_fraud.predict(vectorizer.transform([clean_teks]).toarray())
+        st.success(fraud_detection)        
 
-            if(predict_fraud[0] == 'Positif'):
-                fraud_detection = 'Sentimen Positif'
-            elif(predict_fraud[0] == 'Negatif'):
-                fraud_detection = 'Sentimen Negatif'
-            else:
-                fraud_detection = 'Tidak Terdeteksi'
-    elif (clean_teks != ''):
-        if(st.button('Hasil Deteksi')):
-            predict_fraud = model_fraud.predict(vectorizer.transform([clean_teks]).toarray())
-            print('predict_fraud: ', predict_fraud)
-
-            if(predict_fraud[0] == 'Positif'):
-                fraud_detection = 'Sentimen Positif'
-            elif(predict_fraud[0] == 'Negatif'):
-                fraud_detection = 'Sentimen Negatif'
-            else:
-                fraud_detection = 'Tidak Terdeteksi'
-
-    st.success(fraud_detection)        
+    except FileNotFoundError:
+        st.write('File Model belum tersedia')
